@@ -33,13 +33,17 @@ python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn main:app --reload
+```
 
 ### Frontend
+```bash
 cd frontend
 npm install
 npm run dev
+```
 
 ### Deployment
+```bash
 Backend: Render.com
 
 Frontend: Vercel
@@ -47,8 +51,12 @@ Frontend: Vercel
 Database: Neon.tech
 
 Cache: Upstash Redis
+```
+
+
 
 ### Environment Variables
+```bash
 Copy .env.example to .env and fill:
 
 GROQ_API_KEY
@@ -58,6 +66,9 @@ DATABASE_URL (Neon)
 REDIS_URL (Upstash)
 
 FIREBASE_CONFIG (JSON)
+```
+
+
 
 ### License
 MIT
