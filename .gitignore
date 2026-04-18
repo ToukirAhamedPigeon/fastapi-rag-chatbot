@@ -71,3 +71,22 @@ dump.rdb
 
 # Groq (keep in env only)
 .GROQ_API_KEY
+
+
+# Secrets
+firebase-admin-key.json
+*.pem
+*.key
+.env
+.env.local
+.env.*.local
+
+# Backend
+venv/
+__pycache__/
+*.pyc
+
+# Frontend
+node_modules/
+dist/
+build/
