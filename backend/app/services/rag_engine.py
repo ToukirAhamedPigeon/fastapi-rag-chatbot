@@ -26,25 +26,35 @@ class RAGEngine:
         self.db_url = os.getenv('DATABASE_URL')
         print("✅ RAG Engine ready")
     
-    async def search_documents(self, query: str, limit: int = 5):
-        """Search for relevant documents using vector similarity"""
+    async def search_documents(self, query: str, limit: int = 5, category: str = None):
+        """Search for relevant documents using vector similarity with optional category filter"""
+        
         # Generate query embedding
         query_embedding = self.embedder.encode(query).tolist()
         embedding_vector = '[' + ','.join(str(x) for x in query_embedding) + ']'
         
-        # Search in database
+        # Build query with category filter if provided
         conn = await asyncpg.connect(self.db_url)
         
-        results = await conn.fetch('''
-            SELECT title, content, metadata, 
-                   1 - (embedding <=> $1::vector) as similarity
-            FROM documents
-            ORDER BY embedding <=> $1::vector
-            LIMIT $2
-        ''', embedding_vector, limit)
+        if category:
+            results = await conn.fetch('''
+                SELECT title, content, metadata, 
+                    1 - (embedding <=> $1::vector) as similarity
+                FROM documents
+                WHERE metadata->>'category' ILIKE $2
+                ORDER BY embedding <=> $1::vector
+                LIMIT $3
+            ''', embedding_vector, f'%{category}%', limit)
+        else:
+            results = await conn.fetch('''
+                SELECT title, content, metadata, 
+                    1 - (embedding <=> $1::vector) as similarity
+                FROM documents
+                ORDER BY embedding <=> $1::vector
+                LIMIT $2
+            ''', embedding_vector, limit)
         
         await conn.close()
-        
         return [dict(r) for r in results]
     
     async def generate_answer(self, query: str, context_docs: list) -> str:
