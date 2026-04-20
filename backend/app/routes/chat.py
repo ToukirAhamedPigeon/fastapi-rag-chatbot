@@ -1,14 +1,14 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
-from app.services.rag_engine import get_rag_engine
+from app.services.rag_chroma import RAGChromaEngine
 
 router = APIRouter()
+rag_engine = RAGChromaEngine()
 
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
-    category: Optional[str] = None
 
 class ChatResponse(BaseModel):
     answer: str
@@ -17,11 +17,8 @@ class ChatResponse(BaseModel):
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Main chat endpoint - RAG powered with optional category filter"""
     try:
-        rag = await get_rag_engine()
-        result = await rag.ask(request.message, category=request.category)
-        
+        result = rag_engine.ask(request.message)
         return ChatResponse(
             answer=result["answer"],
             sources=result["sources"],
@@ -33,28 +30,4 @@ async def chat(request: ChatRequest):
 
 @router.get("/health")
 async def health():
-    return {"status": "healthy", "service": "RAG Chatbot"}
-
-@router.get("/stats")
-async def stats():
-    """Get database statistics"""
-    try:
-        import asyncpg
-        import os
-        conn = await asyncpg.connect(os.getenv('DATABASE_URL'))
-        count = await conn.fetchval('SELECT COUNT(*) FROM documents')
-        
-        # Category distribution
-        categories = await conn.fetch('''
-            SELECT metadata->>'category' as category, COUNT(*) 
-            FROM documents 
-            GROUP BY metadata->>'category'
-        ''')
-        await conn.close()
-        
-        return {
-            "total_documents": count,
-            "categories": [dict(c) for c in categories]
-        }
-    except Exception as e:
-        return {"error": str(e)}
+    return {"status": "healthy", "service": "RAG Chatbot with ChromaDB"}
