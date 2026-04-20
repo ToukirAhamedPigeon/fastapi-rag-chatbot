@@ -19,7 +19,7 @@ class RAGEngine:
         
         # Embedding model
         print("🔄 Loading embedding model...")
-        self.embedder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.embedder = SentenceTransformer('all-mpnet-base-v2')
         print("✅ Embedding model loaded")
         
         # Database URL
@@ -27,19 +27,19 @@ class RAGEngine:
         print("✅ RAG Engine ready")
     
     async def search_documents(self, query: str, limit: int = 5, category: str = None):
-        """Search for relevant documents using vector similarity with optional category filter"""
+        """Vector similarity search"""
         
         # Generate query embedding
         query_embedding = self.embedder.encode(query).tolist()
         embedding_vector = '[' + ','.join(str(x) for x in query_embedding) + ']'
         
-        # Build query with category filter if provided
         conn = await asyncpg.connect(self.db_url)
         
+        # Simple vector search
         if category:
             results = await conn.fetch('''
                 SELECT title, content, metadata, 
-                    1 - (embedding <=> $1::vector) as similarity
+                       1 - (embedding <=> $1::vector) as similarity
                 FROM documents
                 WHERE metadata->>'category' ILIKE $2
                 ORDER BY embedding <=> $1::vector
@@ -48,14 +48,36 @@ class RAGEngine:
         else:
             results = await conn.fetch('''
                 SELECT title, content, metadata, 
-                    1 - (embedding <=> $1::vector) as similarity
+                       1 - (embedding <=> $1::vector) as similarity
                 FROM documents
                 ORDER BY embedding <=> $1::vector
                 LIMIT $2
             ''', embedding_vector, limit)
         
         await conn.close()
-        return [dict(r) for r in results]
+        
+        # Filter results with similarity > 0.3 threshold
+        filtered_results = [dict(r) for r in results if r['similarity'] > 0.15]
+        
+        return filtered_results[:limit]
+    
+    def _extract_keywords(self, query: str) -> str:
+        """Extract important keywords from query"""
+        query_lower = query.lower()
+        
+        category_keywords = {
+            'books': 'book fiction non-fiction textbook',
+            'electronics': 'smartphone laptop computer tech',
+            'clothing': 'jeans shirt tshirt pants dress',
+            'home': 'coffee maker blender kitchen',
+            'sports': 'football basketball fitness'
+        }
+        
+        for category, keywords in category_keywords.items():
+            if category in query_lower or any(k in query_lower for k in keywords.split()):
+                return keywords + ' ' + query_lower
+        
+        return query_lower
     
     async def generate_answer(self, query: str, context_docs: list) -> str:
         """Generate answer using Groq LLM"""
@@ -65,12 +87,12 @@ class RAGEngine:
         # Build context
         context_parts = []
         for doc in context_docs:
-            context_parts.append(f"Source: {doc['title']}\nContent: {doc['content'][:800]}")
+            similarity = doc.get('similarity', 0)
+            context_parts.append(f"Source: {doc['title']} (Relevance: {similarity:.2f})\nContent: {doc['content'][:600]}")
         
         context = "\n\n---\n\n".join(context_parts)
         
-        # Prompt template
-        prompt = f"""You are a helpful e-commerce assistant. Answer the question based ONLY on the context below.
+        prompt = f"""You are a helpful e-commerce assistant. Answer based ONLY on the context below.
 
 CONTEXT:
 {context}
@@ -86,7 +108,6 @@ RULES:
 ANSWER:"""
         
         try:
-            # Call Groq API
             response = self.groq_client.chat.completions.create(
                 model="llama-3.1-8b-instant",
                 messages=[
@@ -102,10 +123,10 @@ ANSWER:"""
         except Exception as e:
             return f"Error generating response: {str(e)}"
     
-    async def ask(self, query: str) -> dict:
-        """Main RAG pipeline"""
+    async def ask(self, query: str, category: str = None) -> dict:
+        """Main RAG pipeline with category filter"""
         # Step 1: Search relevant documents
-        relevant_docs = await self.search_documents(query)
+        relevant_docs = await self.search_documents(query, category=category)
         
         if not relevant_docs:
             return {
@@ -116,13 +137,13 @@ ANSWER:"""
         # Step 2: Generate answer
         answer = await self.generate_answer(query, relevant_docs)
         
-        # Step 3: Extract sources (unique)
+        # Step 3: Extract unique sources
         sources = list(set([doc['title'] for doc in relevant_docs]))
         
         return {
             "answer": answer,
             "sources": sources,
-            "similarity_scores": [round(doc['similarity'], 3) for doc in relevant_docs]
+            "relevant_docs": len(relevant_docs)
         }
 
 # Singleton instance

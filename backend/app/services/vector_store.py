@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from .data_loader import DataLoader
 from .chunker import TextChunker
 from .embedder import Embedder
+from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
@@ -48,7 +49,7 @@ class VectorStore:
         async with self.pool.acquire() as conn:
             for chunk in chunks:
                 # embedding কে vector টাইপে কাস্ট করুন
-                embedding_vector = '[' + ','.join(str(x) for x in chunk['embedding']) + ']'
+                embedding_vector = '[' + ','.join(str(float(x)) for x in chunk['embedding']) + ']'
                 
                 await conn.execute('''
                     INSERT INTO documents (title, content, embedding, metadata)

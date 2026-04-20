@@ -8,6 +8,7 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
+    category: Optional[str] = None
 
 class ChatResponse(BaseModel):
     answer: str
@@ -16,10 +17,10 @@ class ChatResponse(BaseModel):
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Main chat endpoint - RAG powered"""
+    """Main chat endpoint - RAG powered with optional category filter"""
     try:
         rag = await get_rag_engine()
-        result = await rag.ask(request.message)
+        result = await rag.ask(request.message, category=request.category)
         
         return ChatResponse(
             answer=result["answer"],
@@ -42,7 +43,18 @@ async def stats():
         import os
         conn = await asyncpg.connect(os.getenv('DATABASE_URL'))
         count = await conn.fetchval('SELECT COUNT(*) FROM documents')
+        
+        # Category distribution
+        categories = await conn.fetch('''
+            SELECT metadata->>'category' as category, COUNT(*) 
+            FROM documents 
+            GROUP BY metadata->>'category'
+        ''')
         await conn.close()
-        return {"total_documents": count}
+        
+        return {
+            "total_documents": count,
+            "categories": [dict(c) for c in categories]
+        }
     except Exception as e:
         return {"error": str(e)}
