@@ -13,8 +13,11 @@ class RAGChromaEngine:
         
         # ChromaDB client
         self.client = chromadb.PersistentClient(path="./chroma_db")
-        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="all-MiniLM-L6-v2"
+        
+        # HuggingFace embedding function (sentence-transformers ছাড়া)
+        self.embedding_fn = embedding_functions.HuggingFaceEmbeddingFunction(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            api_key=os.getenv('HF_API_KEY')  # Optional, for rate limiting
         )
         
         # Try to get existing collection
