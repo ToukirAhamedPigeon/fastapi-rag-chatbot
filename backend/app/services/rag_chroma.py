@@ -2,7 +2,6 @@ import os
 import re
 from groq import Groq
 from dotenv import load_dotenv
-import requests
 import chromadb
 from chromadb.utils import embedding_functions
 
@@ -10,45 +9,45 @@ load_dotenv()
 
 class RAGChromaEngine:
     def __init__(self):
-        try:
-            print("Downloading ChromaDB from R2...")
-            url = os.getenv('R2_PUBLIC_URL')
-            response = requests.get(url, verify=False)  # Disable SSL verification temporarily
-            with open('/tmp/chroma_db.zip', 'wb') as f:
-                f.write(response.content)
-            
-            import zipfile
-            with zipfile.ZipFile('/tmp/chroma_db.zip', 'r') as zip_ref:
-                zip_ref.extractall('/tmp/chroma_db')
-            print("✅ ChromaDB downloaded")
-        except Exception as e:
-            print(f"⚠️ Could not download ChromaDB: {e}")
+        print("🔄 Initializing Chroma RAG Engine...")
         
-        # ChromaDB client
-        self.client = chromadb.PersistentClient(path="./chroma_db")
+        # ChromaDB client with persistent path
+        # Render free tier uses /tmp for temporary storage
+        persist_path = "/tmp/chroma_db"
+        os.makedirs(persist_path, exist_ok=True)
         
-        # HuggingFace embedding function (sentence-transformers ছাড়া)
+        self.client = chromadb.PersistentClient(path=persist_path)
+        print(f"✅ ChromaDB client initialized at {persist_path}")
+        
+        # HuggingFace embedding function
         self.embedding_fn = embedding_functions.HuggingFaceEmbeddingFunction(
             model_name="sentence-transformers/all-MiniLM-L6-v2",
-            api_key=os.getenv('HF_API_KEY')  # Optional, for rate limiting
+            api_key=os.getenv('HF_API_KEY')
         )
         
-        # Try to get existing collection
+        # Try to get existing collection or create empty one
         try:
             self.collection = self.client.get_collection("documents")
             print("✅ Loaded existing ChromaDB collection")
         except:
-            print("⚠️ No collection found. Please run load_to_chroma.py first")
-            self.collection = None
+            # Create empty collection - data will need to be loaded
+            self.collection = self.client.create_collection(
+                name="documents",
+                embedding_function=self.embedding_fn
+            )
+            print("⚠️ Created new empty ChromaDB collection. Please load data via API.")
+            print("   Use POST /load-data endpoint to populate the database.")
         
         # Groq client
         api_key = os.getenv('GROQ_API_KEY')
+        if not api_key:
+            print("⚠️ GROQ_API_KEY not found in environment variables")
         self.groq_client = Groq(api_key=api_key) if api_key else None
         print("✅ RAG Engine ready")
     
     def ask(self, query: str) -> dict:
         if not self.collection:
-            return {"answer": "Database not ready. Please run load_to_chroma.py", "sources": []}
+            return {"answer": "Database not ready. Please load data first.", "sources": []}
         
         # Extract price filter
         price_max = None
@@ -72,7 +71,7 @@ class RAGChromaEngine:
             return {"answer": f"Search error: {str(e)}", "sources": []}
         
         if not results or not results['documents'] or not results['documents'][0]:
-            return {"answer": "I couldn't find any relevant information.", "sources": []}
+            return {"answer": "I couldn't find any relevant information. Please load product data first.", "sources": []}
         
         # Build context
         context = ""
