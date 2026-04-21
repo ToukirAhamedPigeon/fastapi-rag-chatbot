@@ -2,7 +2,7 @@ import os
 import re
 from groq import Groq
 from dotenv import load_dotenv
-import urllib.request
+import requests
 import chromadb
 from chromadb.utils import embedding_functions
 
@@ -12,17 +12,17 @@ class RAGChromaEngine:
     def __init__(self):
         try:
             print("Downloading ChromaDB from R2...")
-            urllib.request.urlretrieve(
-                os.getenv('R2_PUBLIC_URL'), 
-                '/tmp/chroma_db.zip'
-            )
+            url = os.getenv('R2_PUBLIC_URL')
+            response = requests.get(url, verify=False)  # Disable SSL verification temporarily
+            with open('/tmp/chroma_db.zip', 'wb') as f:
+                f.write(response.content)
+            
             import zipfile
             with zipfile.ZipFile('/tmp/chroma_db.zip', 'r') as zip_ref:
                 zip_ref.extractall('/tmp/chroma_db')
             print("✅ ChromaDB downloaded")
         except Exception as e:
             print(f"⚠️ Could not download ChromaDB: {e}")
-            print("🔄 Initializing Chroma RAG Engine...")
         
         # ChromaDB client
         self.client = chromadb.PersistentClient(path="./chroma_db")
