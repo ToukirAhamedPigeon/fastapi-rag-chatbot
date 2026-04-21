@@ -86,6 +86,10 @@ venv/
 __pycache__/
 *.pyc
 
+!backend/chroma_db/
+!backend/chroma_db/**/*.bin
+!backend/chroma_db/**/*.pickle
+
 # Frontend
 node_modules/
 dist/
